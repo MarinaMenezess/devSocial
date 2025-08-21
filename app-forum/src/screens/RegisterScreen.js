@@ -11,9 +11,11 @@ import {
   Animated,
   Easing,
   Dimensions,
-  Platform // Para sombras
+  Platform, // Para sombras
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import api from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 const GRADIENT_SIZE = Math.max(width, height) * 2.5;
@@ -22,8 +24,6 @@ const RegisterScreen = ({ navigation }) => {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // 1. Estado para controlar o foco
   const [focusedInput, setFocusedInput] = useState(null);
 
   const animatedValue = useRef(new Animated.Value(0)).current;
@@ -45,7 +45,7 @@ const RegisterScreen = ({ navigation }) => {
         }),
       ])
     ).start();
-  }, []);
+  }, [animatedValue]);
 
   const rotateAnimation = animatedValue.interpolate({
     inputRange: [0, 1],
@@ -70,7 +70,24 @@ const RegisterScreen = ({ navigation }) => {
     ],
   };
 
-  const handleRegister = async () => { /* Sua lógica */ };
+  const handleRegister = async () => {
+    if (!username.trim() || !email.trim() || !password.trim()) {
+      Alert.alert('Erro', 'Todos os campos são obrigatórios.');
+      return;
+    }
+    try {
+      await api.post('/auth/register', {
+        username,
+        email,
+        password,
+      });
+      Alert.alert('Sucesso', 'Usuário registrado com sucesso!');
+      navigation.navigate('Login');
+    } catch (error) {
+      console.error('Erro no cadastro:', error.response?.data || error.message);
+      Alert.alert('Erro no Cadastro', error.response?.data?.message || 'Ocorreu um erro ao tentar se cadastrar.');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -90,7 +107,6 @@ const RegisterScreen = ({ navigation }) => {
       <SafeAreaView style={styles.contentContainer}>
         <Text style={styles.title}>Crie sua conta</Text>
         
-        {/* 2. Aplicar os estilos e handlers de foco/blur */}
         <TextInput
           style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
           placeholder="Nome de Usuário"
@@ -106,6 +122,8 @@ const RegisterScreen = ({ navigation }) => {
           placeholderTextColor="#eee"
           value={email}
           onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
           onFocus={() => setFocusedInput('email')}
           onBlur={() => setFocusedInput(null)}
         />
@@ -183,10 +201,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'flex-start'
   },
-  // 3. Novo estilo para o estado focado
   inputFocused: {
-    borderColor: 'rgba(255, 255, 255, 1)', // Borda mais visível
-    backgroundColor: "rgba(255, 255, 255, 0.3)", // Simula o brilho interior
+    borderColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     shadowColor: '#fff',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,

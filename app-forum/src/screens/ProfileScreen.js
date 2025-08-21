@@ -162,7 +162,7 @@ const ProfileScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: '#A3EBB1',
   },
   loadingContainer: {
     flex: 1,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     marginBottom: 15,
     borderWidth: 2,
-    borderColor: '#007bff',
+    borderColor: '#116530',
   },
   profilePicturePlaceholder: {
     marginBottom: 15,
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#007bff',
+    borderBottomColor: '#116530',
   },
   tabText: {
     fontSize: 16,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   activeTabText: {
-    color: '#007bff',
+    color: '#116530',
   },
   postListContent: {
     paddingHorizontal: 15,

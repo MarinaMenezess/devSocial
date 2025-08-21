@@ -10,31 +10,32 @@ import {
   SafeAreaView,
   Animated,
   Easing,
-  Dimensions // Para obter o tamanho da tela
+  Dimensions,
+  Platform // Para sombras
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-// Obtém as dimensões da tela para o posicionamento
 const { width, height } = Dimensions.get('window');
+const GRADIENT_SIZE = Math.max(width, height) * 2.5;
 
 const RegisterScreen = ({ navigation }) => {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // --- Nova Lógica de Animação ---
-  // Um único Animated.Value para controlar todo o progresso da animação
+  // 1. Estado para controlar o foco
+  const [focusedInput, setFocusedInput] = useState(null);
+
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // A animação vai de 0 a 1 e depois volta para 0, em loop
     Animated.loop(
       Animated.sequence([
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: 10000, // Metade da duração total (20s)
+          duration: 10000,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true, // A animação de transformação é otimizada
+          useNativeDriver: true,
         }),
         Animated.timing(animatedValue, {
           toValue: 0,
@@ -46,22 +47,19 @@ const RegisterScreen = ({ navigation }) => {
     ).start();
   }, []);
 
-  // Interpolação para a rotação (de 0deg para 360deg)
   const rotateAnimation = animatedValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  // Interpolação para a translação (movimento)
-  // O movimento será suave do canto superior esquerdo para o inferior direito
   const translateX = animatedValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [-width * 0.5, width * 0.1], // De -50% a +10% da largura
+    outputRange: [-width * 0.25, width * 0.25],
   });
 
   const translateY = animatedValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [-height * 0.5, height * 0.1], // De -50% a +10% da altura
+    outputRange: [-height * 0.25, height * 0.25],
   });
 
   const animatedStyle = {
@@ -71,20 +69,17 @@ const RegisterScreen = ({ navigation }) => {
       { rotate: rotateAnimation },
     ],
   };
-  // --- Fim da Nova Lógica de Animação ---
 
-  const handleRegister = async () => { /* Sua lógica de cadastro */ };
+  const handleRegister = async () => { /* Sua lógica */ };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {/* Container de fundo com uma cor base e overflow hidden */}
       <View style={styles.backgroundContainer}>
         <Animated.View style={[styles.gradient, animatedStyle]}>
           <LinearGradient
-            // As suas cores!
-            colors={['#F7D4E0', '#FD7AC0', '#7AD7F0', '#44C8E0']}
+            colors={['#A3EBB1', '#116530', '#18A558', '#21B6A8']}
             style={styles.gradientInner}
             start={{ x: 0, y: 0.3 }}
             end={{ x: 1, y: 0.7 }}
@@ -92,34 +87,41 @@ const RegisterScreen = ({ navigation }) => {
         </Animated.View>
       </View>
 
-      {/* Conteúdo da tela fica por cima */}
       <SafeAreaView style={styles.contentContainer}>
-        {/* Adicione um ScrollView se o conteúdo puder exceder a tela */}
         <Text style={styles.title}>Crie sua conta</Text>
+        
+        {/* 2. Aplicar os estilos e handlers de foco/blur */}
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
           placeholder="Nome de Usuário"
           placeholderTextColor="#eee"
           value={username}
           onChangeText={setUsername}
+          onFocus={() => setFocusedInput('username')}
+          onBlur={() => setFocusedInput(null)}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === 'email' && styles.inputFocused]}
           placeholder="E-mail"
           placeholderTextColor="#eee"
           value={email}
           onChangeText={setEmail}
+          onFocus={() => setFocusedInput('email')}
+          onBlur={() => setFocusedInput(null)}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === 'password' && styles.inputFocused]}
           placeholder="Senha"
           placeholderTextColor="#eee"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          onFocus={() => setFocusedInput('password')}
+          onBlur={() => setFocusedInput(null)}
         />
+        
         <View style={styles.buttonContainer}>
-          <Button title="Cadastrar" onPress={handleRegister} color="#FD7AC0"/>
+          <Button title="Cadastrar" onPress={handleRegister} color="#116530"/>
         </View>
         <TouchableOpacity onPress={() => navigation.navigate("Login")}>
           <Text style={styles.loginText}>Já tem uma conta? Faça login</Text>
@@ -132,26 +134,35 @@ const RegisterScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#7bb7f2', // Cor de fundo base do seu CSS
+    backgroundColor: '#21B6A8',
+    justifyContent: 'center', 
+    alignItems: 'center',
   },
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden', // Garante que o gradiente gigante não cause scroll
+    overflow: 'hidden',
   },
   gradient: {
-    width: '200%',
-    height: '200%',
-    opacity: 0.8, // Opacidade do seu CSS
+    width: GRADIENT_SIZE,
+    height: GRADIENT_SIZE,
+    left: (width - GRADIENT_SIZE) / 2,
+    top: (height - GRADIENT_SIZE) / 2,
+    opacity: 0.8,
   },
   gradientInner: {
     flex: 1,
   },
   contentContainer: {
-    flex: 1,
     justifyContent: 'center',
-    padding: 20,
-    backgroundColor: 'transparent',
-    zIndex: 1, // Garante que o conteúdo fique na frente da animação
+    alignItems: 'center',
+    width: '60%',
+    height: '70%',
+    padding: 40,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.5)",
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    zIndex: 1,
   },
   title: {
     fontSize: 28,
@@ -161,18 +172,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   input: {
-    width: "100%",
-    padding: 15,
-    borderWidth: 1,
+    width: "80%",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 2,
     borderColor: "rgba(255, 255, 255, 0.5)",
-    borderRadius: 8,
+    borderRadius: 40,
     marginBottom: 15,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
     color: "#fff",
     fontSize: 16,
+    textAlign: 'flex-start'
+  },
+  // 3. Novo estilo para o estado focado
+  inputFocused: {
+    borderColor: 'rgba(255, 255, 255, 1)', // Borda mais visível
+    backgroundColor: "rgba(255, 255, 255, 0.3)", // Simula o brilho interior
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    outlineStyle: 'none',
   },
   buttonContainer: {
-    alignItems: 'flex-end',
+    width: '30%',
     marginTop: 10,
   },
   loginText: {

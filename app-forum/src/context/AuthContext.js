@@ -26,14 +26,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // MODIFICAÇÃO: O useEffect foi alterado para não carregar mais o token ao iniciar.
-  // Isto força a aplicação a começar sempre como se o utilizador estivesse deslogado.
-  useEffect(() => {
-    // A lógica para carregar o token foi removida daqui.
-    // Se quiser reverter para o comportamento normal (lembrar o login),
-    // basta adicionar a função loadToken de volta aqui.
-  }, []);
-
   return (
     <AuthContext.Provider value={{ userToken, isLoading, signIn, signOut }}>
       {children}

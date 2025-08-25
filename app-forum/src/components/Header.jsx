@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native"; // <-- Platform foi adicionado aqui
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import AuthContext from "../context/AuthContext";
@@ -9,14 +9,13 @@ const Header = ({ title, user }) => {
   const route = useRoute();
   const { signOut } = useContext(AuthContext);
 
+  // FUNÇÃO MODIFICADA: Agora chama o signOut diretamente.
   const handleLogout = () => {
-    Alert.alert("Sair", "Você tem certeza que deseja sair?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sair", onPress: () => signOut(), style: "destructive" },
-    ]);
+    console.log("Header.jsx: Botão de logout pressionado.");
+    console.log("Header.jsx: A chamar signOut() diretamente.");
+    signOut();
   };
 
-  // Não mostra o botão de voltar na HomeScreen
   const canGoBack = navigation.canGoBack() && route.name !== 'Home';
 
   return (
@@ -65,13 +64,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E8E8E8",
-    paddingTop: Platform.OS === 'web' ? 12 : 40, // Ajuste para web
+    paddingTop: Platform.OS === 'web' ? 12 : 40,
     width: '100%',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#116530", // Cor Primária Escura
+    color: "#116530",
   },
   headerButtons: {
     flexDirection: "row",
@@ -84,7 +83,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   placeholder: {
-      flex: 1, // Ocupa o mesmo espaço que os botões
+      flex: 1,
   }
 });
 

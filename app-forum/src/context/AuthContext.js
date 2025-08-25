@@ -1,56 +1,37 @@
-// src/context/AuthContext.js
-
 import React, { createContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Para persistir o token
-
-// Instalar AsyncStorage:
-// npx expo install @react-native-async-storage/async-storage
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Para carregar o token ao iniciar
+  // Definimos isLoading como false, pois não vamos mais esperar o carregamento do token
+  const [isLoading, setIsLoading] = useState(false); 
 
-  // Função para salvar o token e o usuário (se necessário)
   const signIn = async (token, userData) => {
     try {
       await AsyncStorage.setItem('userToken', token);
-      // Opcional: salvar dados do usuário, se forem muitos, ou apenas o token
-      // await AsyncStorage.setItem('userData', JSON.stringify(userData));
       setUserToken(token);
     } catch (e) {
-      console.error('Erro ao salvar token/dados no AsyncStorage', e);
+      console.error('Erro ao salvar token no AsyncStorage', e);
     }
   };
 
-  // Função para remover o token ao fazer logout
   const signOut = async () => {
     try {
-      console.log('AuthContext: Iniciando signOut(). Tentando remover userToken.'); // <-- Adicione este log
       await AsyncStorage.removeItem('userToken');
       setUserToken(null);
-      console.log('AuthContext: userToken definido para null e AsyncStorage limpo.'); // <-- Adicione este log
     } catch (e) {
-      console.error('AuthContext: Erro ao remover token do AsyncStorage:', e); // <-- MUITO IMPORTANTE
+      console.error('Erro ao remover token do AsyncStorage:', e);
     }
   };
-  // Carregar o token ao iniciar o aplicativo
-  useEffect(() => {
-    const loadToken = async () => {
-      try {
-        const token = await AsyncStorage.getItem('userToken');
-        if (token) {
-          setUserToken(token);
-        }
-      } catch (e) {
-        console.error('Erro ao carregar token do AsyncStorage', e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
 
-    loadToken();
+  // MODIFICAÇÃO: O useEffect foi alterado para não carregar mais o token ao iniciar.
+  // Isto força a aplicação a começar sempre como se o utilizador estivesse deslogado.
+  useEffect(() => {
+    // A lógica para carregar o token foi removida daqui.
+    // Se quiser reverter para o comportamento normal (lembrar o login),
+    // basta adicionar a função loadToken de volta aqui.
   }, []);
 
   return (

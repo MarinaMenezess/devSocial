@@ -156,14 +156,14 @@ const EditProfileScreen = ({ route, navigation }) => {
         </TouchableOpacity>
 
         <TextInput
-          style={styles.input}
+          style={[styles.sectionTitle, focusedInput === 'username' && styles.inputFocused]}
           placeholder="Nome de Usuário"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
         />
         <TextInput
-          style={styles.input}
+          style={[styles.sectionTitle, focusedInput === 'email' && styles.inputFocused]}
           placeholder="E-mail"
           value={email}
           onChangeText={setEmail}
@@ -173,21 +173,21 @@ const EditProfileScreen = ({ route, navigation }) => {
 
         <Text style={styles.sectionTitle}>Mudar Senha (Opcional)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.sectionTitle, focusedInput === 'old-password' && styles.inputFocused]}
           placeholder="Senha Antiga"
           value={oldPassword}
           onChangeText={setOldPassword}
           secureTextEntry
         />
         <TextInput
-          style={styles.input}
+          style={[styles.sectionTitle, focusedInput === 'new-password' && styles.inputFocused]}
           placeholder="Nova Senha"
           value={newPassword}
           onChangeText={setNewPassword}
           secureTextEntry
         />
         <TextInput
-          style={styles.input}
+          style={[styles.sectionTitle, focusedInput === 'confirm-password' && styles.inputFocused]}
           placeholder="Confirmar Nova Senha"
           value={confirmNewPassword}
           onChangeText={setConfirmNewPassword}
@@ -242,14 +242,26 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   input: {
-    width: '100%',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    width: "80%",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 2,
+    borderRadius: 40,
+    borderColor: "rgba(255, 255, 255, 0.5)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     marginBottom: 15,
-    backgroundColor: '#fff',
+    color: "#fff",
     fontSize: 16,
+    textAlign: 'flex-start'
+  },
+  inputFocused: {
+    borderColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    outlineStyle: 'none',
   },
   sectionTitle: {
     fontSize: 18,

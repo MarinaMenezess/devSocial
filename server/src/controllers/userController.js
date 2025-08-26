@@ -1,100 +1,94 @@
-// src/controllers/userController.js
+// server/src/controllers/userController.js
 
 const pool = require('../../db');
-const bcrypt = require('bcryptjs'); // Para comparar senhas na edição
-const jwt = require('jsonwebtoken'); // Se for preciso atualizar token após mudança de dados
+const bcrypt = require('bcryptjs');
 
-// Chave secreta JWT (a mesma do authController.js)
-const jwtSecret = process.env.JWT_SECRET || 'senhajwt';
-
-// Obter informações do usuário logado (usado no perfil)
+// Rota: GET /api/users/me
+// Desc: Busca as informações do usuário logado.
 exports.getMe = async (req, res) => {
-  const userId = req.user.id; // Vem do middleware de autenticação
-
   try {
-    const [rows] = await pool.query(
-      'SELECT id, username, email, profile_picture_url, created_at FROM users WHERE id = ?',
-      [userId]
+    const [users] = await pool.query(
+      'SELECT id, username, email, profile_picture_url FROM users WHERE id = ?',
+      [req.user.id]
     );
-
-    if (rows.length === 0) {
+    if (users.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
-
-    res.status(200).json(rows[0]);
+    res.status(200).json(users[0]);
   } catch (error) {
-    console.error('Erro ao buscar informações do usuário:', error);
-    res.status(500).json({ message: 'Erro interno do servidor ao buscar informações do usuário.' });
+    console.error('Erro ao buscar dados do usuário:', error);
+    res.status(500).json({ message: 'Erro interno do servidor.' });
   }
 };
 
-// Obter posts feitos pelo usuário logado
+// Rota: GET /api/users/me/posts
+// Desc: Busca todos os posts criados pelo usuário logado.
 exports.getMyPosts = async (req, res) => {
-  const userId = req.user.id; // Vem do middleware de autenticação
-
   try {
-    const [rows] = await pool.query(`
-      SELECT
-          p.id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
-          u.id AS user_id, u.username, u.profile_picture_url,
-          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count,
-          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comments_count
+    const query = `
+      SELECT 
+        p.id, p.title, p.content, p.image_url, p.created_at,
+        u.username AS author_username,
+        u.profile_picture_url AS author_profile_picture_url
       FROM posts p
       JOIN users u ON p.user_id = u.id
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
-    `, [userId]);
-    res.status(200).json(rows);
+    `;
+    const [posts] = await pool.query(query, [req.user.id]);
+    res.status(200).json(posts);
   } catch (error) {
-    console.error('Erro ao buscar posts do usuário:', error);
-    res.status(500).json({ message: 'Erro interno do servidor ao buscar posts do usuário.' });
+    console.error('Erro ao buscar os posts do usuário:', error);
+    res.status(500).json({ message: 'Erro interno do servidor.' });
   }
 };
 
-// Obter posts favoritados pelo usuário logado
+// Rota: GET /api/users/me/favorites
+// Desc: Busca todos os posts favoritados pelo usuário logado.
 exports.getMyFavoritePosts = async (req, res) => {
-  const userId = req.user.id; // Vem do middleware de autenticação
-
-  try {
-    const [rows] = await pool.query(`
-      SELECT
-          p.id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
-          u.id AS user_id, u.username, u.profile_picture_url,
-          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count,
-          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comments_count
-      FROM posts p
-      JOIN favorites f ON p.id = f.post_id
-      JOIN users u ON p.user_id = u.id
-      WHERE f.user_id = ?
-      ORDER BY f.created_at DESC -- Ordenar por quando foi favoritado
-    `, [userId]);
-    res.status(200).json(rows);
-  } catch (error) {
-    console.error('Erro ao buscar posts favoritos do usuário:', error);
-    res.status(500).json({ message: 'Erro interno do servidor ao buscar posts favoritos.' });
-  }
+    try {
+        const query = `
+            SELECT 
+                p.id, 
+                p.title, 
+                p.content, 
+                p.image_url, 
+                p.created_at,
+                u.username AS author_username,
+                u.profile_picture_url AS author_profile_picture_url
+            FROM favorites f
+            JOIN posts p ON f.post_id = p.id
+            JOIN users u ON p.user_id = u.id
+            WHERE f.user_id = ?
+            ORDER BY f.created_at DESC
+        `;
+        const [favoritePosts] = await pool.query(query, [req.user.id]);
+        res.status(200).json(favoritePosts);
+    } catch (error) {
+        console.error('Erro ao buscar posts favoritos do usuário:', error);
+        res.status(500).json({ message: 'Erro interno do servidor.' });
+    }
 };
 
-// Atualizar informações do usuário (username, email, profile_picture_url, password)
+
+// Rota: PUT /api/users/me
+// Desc: Atualiza o perfil do usuário logado.
 exports.updateProfile = async (req, res) => {
   const userId = req.user.id;
   const { username, email, old_password, new_password, profile_picture_url } = req.body;
 
   try {
-    let updateQuery = 'UPDATE users SET ';
-    const updateValues = [];
-    const fieldsToUpdate = [];
-
-    // Busca o usuário para verificar a senha antiga (se fornecida)
     const [users] = await pool.query('SELECT password FROM users WHERE id = ?', [userId]);
     if (users.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
     const user = users[0];
 
-    // Verifica e atualiza username
+    let updateQuery = 'UPDATE users SET ';
+    const updateValues = [];
+    const fieldsToUpdate = [];
+
     if (username && username.trim() !== '') {
-      // Verifique se o novo username já existe (exceto o próprio usuário)
       const [existingUsername] = await pool.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, userId]);
       if (existingUsername.length > 0) {
         return res.status(409).json({ message: 'Nome de usuário já está em uso.' });
@@ -103,9 +97,7 @@ exports.updateProfile = async (req, res) => {
       updateValues.push(username);
     }
 
-    // Verifica e atualiza email
     if (email && email.trim() !== '') {
-      // Verifique se o novo email já existe (exceto o próprio usuário)
       const [existingEmail] = await pool.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
       if (existingEmail.length > 0) {
         return res.status(409).json({ message: 'E-mail já está em uso.' });
@@ -113,14 +105,12 @@ exports.updateProfile = async (req, res) => {
       fieldsToUpdate.push('email = ?');
       updateValues.push(email);
     }
-
-    // Atualiza foto de perfil (permite remover com null/string vazia)
-    if (profile_picture_url !== undefined) { // Permite explicitamente enviar null para remover
+    
+    if (profile_picture_url !== undefined) {
         fieldsToUpdate.push('profile_picture_url = ?');
         updateValues.push(profile_picture_url || null);
     }
 
-    // Lógica para atualizar a senha
     if (new_password) {
       if (!old_password) {
         return res.status(400).json({ message: 'Senha antiga é obrigatória para atualizar a senha.' });
@@ -143,16 +133,7 @@ exports.updateProfile = async (req, res) => {
 
     await pool.query(updateQuery, updateValues);
 
-    // Opcional: Re-gerar token JWT se username/email mudar, pois eles estão no payload
-    // Se o username ou email mudou, o token JWT antigo pode ficar desatualizado
-    // Uma abordagem é simplesmente pedir para o usuário fazer login novamente.
-    // Ou você pode gerar um novo token e enviá-lo de volta:
-    // const [updatedUser] = await pool.query('SELECT id, username FROM users WHERE id = ?', [userId]);
-    // const newToken = jwt.sign({ id: updatedUser[0].id, username: updatedUser[0].username }, jwtSecret, { expiresIn: '1h' });
-    // res.status(200).json({ message: 'Perfil atualizado com sucesso!', token: newToken });
-
     res.status(200).json({ message: 'Perfil atualizado com sucesso!' });
-
   } catch (error) {
     console.error('Erro ao atualizar perfil do usuário:', error);
     res.status(500).json({ message: 'Erro interno do servidor ao atualizar perfil.' });

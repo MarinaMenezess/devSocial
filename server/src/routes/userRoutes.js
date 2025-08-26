@@ -30,5 +30,16 @@ router.get('/likes', authMiddleware.verifyToken, async (req, res) => {
   }
 });
 
+// Endpoint adicional para buscar os IDs dos posts favoritados por um usuário
+router.get('/me/favorites/ids', authMiddleware.verifyToken, async (req, res) => {
+  try {
+      const [rows] = await pool.query('SELECT post_id FROM favorites WHERE user_id = ?', [req.user.id]);
+      res.status(200).json(rows);
+  } catch (error) {
+      console.error('Erro ao buscar IDs de posts favoritos do usuário:', error);
+      res.status(500).json({ message: 'Erro interno do servidor ao buscar IDs de posts favoritos.' });
+  }
+});
+
 
 module.exports = router;

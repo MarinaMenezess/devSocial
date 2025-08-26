@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Platform, // Importação adicionada para lidar com diferentes plataformas
+  Platform,
 } from "react-native";
 import AuthContext from "../context/AuthContext";
 import api from "../services/api";
@@ -30,18 +30,15 @@ const HomeScreen = ({ navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [userLikes, setUserLikes] = useState({});
+  const [userFavorites, setUserFavorites] = useState({});
   const [currentUserId, setCurrentUserId] = useState(null);
   const [newPostImageUri, setNewPostImageUri] = useState(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Tenta obter o ID do usuário do token JWT decodificado ou do storage
         const userToken = await AsyncStorage.getItem("userToken");
         if (userToken) {
-           // Uma forma simples de obter o ID seria decodificar o token,
-           // mas por simplicidade e para evitar bibliotecas extras no front-end,
-           // vamos buscar os dados do usuário.
            const meResponse = await api.get('/users/me', {
                headers: { Authorization: `Bearer ${userToken}` }
            });
@@ -75,6 +72,7 @@ const HomeScreen = ({ navigation }) => {
       const response = await api.get(`/posts?q=${searchTerm}`);
       const userToken = await AsyncStorage.getItem("userToken");
       let initialUserLikes = {};
+      let initialUserFavorites = {};
       if (userToken) {
         try {
             const likesResponse = await api.get(`/users/likes`, {
@@ -83,11 +81,19 @@ const HomeScreen = ({ navigation }) => {
             likesResponse.data.forEach((like) => {
               initialUserLikes[like.post_id] = true;
             });
-        } catch (likesError) {
-            console.error( "Erro ao buscar likes do usuário:", likesError.response?.data || likesError.message);
+
+            const favoritesResponse = await api.get(`/users/me/favorites/ids`, {
+                headers: { Authorization: `Bearer ${userToken}` },
+            });
+            favoritesResponse.data.forEach((favorite) => {
+                initialUserFavorites[favorite.post_id] = true;
+            });
+        } catch (error) {
+            console.error( "Erro ao buscar likes ou favoritos do usuário:", error.response?.data || error.message);
         }
       }
       setUserLikes(initialUserLikes);
+      setUserFavorites(initialUserFavorites);
       setPosts(response.data);
     } catch (error) {
       console.error(
@@ -139,14 +145,11 @@ const HomeScreen = ({ navigation }) => {
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : 'image';
 
-        // --- INÍCIO DA CORREÇÃO ---
         if (Platform.OS === 'web') {
-            // Na web, precisamos buscar o blob da imagem
             const response = await fetch(newPostImageUri);
             const blob = await response.blob();
             formData.append('postImage', blob, filename);
         } else {
-            // Em nativo, o formato { uri, name, type } funciona
             const postImageFile = {
                 uri: newPostImageUri,
                 name: filename,
@@ -154,7 +157,6 @@ const HomeScreen = ({ navigation }) => {
             };
             formData.append("postImage", postImageFile);
         }
-        // --- FIM DA CORREÇÃO ---
 
         try {
           const uploadResponse = await api.post(
@@ -213,7 +215,6 @@ const HomeScreen = ({ navigation }) => {
       setIsSubmitting(false);
     }
   };
-
 
   const handleToggleLike = async (postId) => {
     try {
@@ -276,6 +277,12 @@ const HomeScreen = ({ navigation }) => {
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
       Alert.alert("Sucesso", response.data.message);
+
+      setUserFavorites((prevFavorites) => ({
+        ...prevFavorites,
+        [postId]: response.data.favorited,
+      }));
+
     } catch (error) {
       console.error(
         "Erro ao favoritar/desfavoritar:",
@@ -343,11 +350,24 @@ const HomeScreen = ({ navigation }) => {
           style={styles.interactionButton}
           onPress={() => handleToggleFavorite(item.id)}
         >
-          <Ionicons name="bookmark-outline" size={24} color="#666" />
+          <Ionicons
+            name={userFavorites[item.id] ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={userFavorites[item.id] ? "#FFC107" : "#666"}
+          />
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  if (loadingPosts && posts.length === 0) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#116530" />
+        <Text style={styles.loadingText}>Carregando posts...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -411,7 +431,7 @@ const HomeScreen = ({ navigation }) => {
         contentContainerStyle={styles.postListContainer}
         ListFooterComponent={
             loadingPosts ? (
-              <ActivityIndicator size="large" color="#0000ff" style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="large" color="#116530" style={{ marginVertical: 20 }} />
             ) : null
         }
         ListEmptyComponent={
@@ -433,6 +453,15 @@ const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: "#A3EBB1",
+    },
+    loadingContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 10,
+      fontSize: 16,
+      color: '#116530',
     },
     postListContainer: {
         maxWidth: "800px",
@@ -459,7 +488,7 @@ const styles = StyleSheet.create({
       fontSize: 16,
     },
     searchButton: {
-      backgroundColor: "116530",
+      backgroundColor: "#116530",
       padding: 8,
       borderTopRightRadius: 25,
       borderBottomRightRadius: 25,

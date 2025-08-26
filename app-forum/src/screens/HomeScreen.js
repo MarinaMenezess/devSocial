@@ -1,6 +1,6 @@
 // src/screens/HomeScreen.js
 
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  RefreshControl,
 } from "react-native";
 import AuthContext from "../context/AuthContext";
 import api from "../services/api";
@@ -33,63 +34,42 @@ const HomeScreen = ({ navigation }) => {
   const [userFavorites, setUserFavorites] = useState({});
   const [currentUserId, setCurrentUserId] = useState(null);
   const [newPostImageUri, setNewPostImageUri] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const userToken = await AsyncStorage.getItem("userToken");
-        if (userToken) {
-           const meResponse = await api.get('/users/me', {
-               headers: { Authorization: `Bearer ${userToken}` }
-           });
-           setCurrentUserId(meResponse.data.id);
-        }
-      } catch (error) {
-        console.error(
-          "Erro ao carregar dados do usuário:",
-          error
-        );
-      }
-    };
-    loadData();
-    fetchPosts();
-
-    (async () => {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permissão Negada",
-          "Desculpe, precisamos de permissões de galeria para isso funcionar!"
-        );
-      }
-    })();
-  }, [searchTerm]);
-
-  const fetchPosts = async () => {
+  // Busca os posts da API. Usamos useCallback para memoizar a função.
+  const fetchPosts = useCallback(async () => {
+    console.log(`Buscando posts com o termo: "${searchTerm}"`);
     setLoadingPosts(true);
     try {
+      // O termo de busca é passado como um query parameter para a API
       const response = await api.get(`/posts?q=${searchTerm}`);
       const userToken = await AsyncStorage.getItem("userToken");
       let initialUserLikes = {};
       let initialUserFavorites = {};
+
       if (userToken) {
         try {
-            const likesResponse = await api.get(`/users/likes`, {
+          // Busca os likes e favoritos do usuário para marcar os posts corretamente
+          const [likesResponse, favoritesResponse] = await Promise.all([
+            api.get(`/users/likes`, {
               headers: { Authorization: `Bearer ${userToken}` },
-            });
-            likesResponse.data.forEach((like) => {
-              initialUserLikes[like.post_id] = true;
-            });
+            }),
+            api.get(`/users/me/favorites/ids`, {
+              headers: { Authorization: `Bearer ${userToken}` },
+            }),
+          ]);
 
-            const favoritesResponse = await api.get(`/users/me/favorites/ids`, {
-                headers: { Authorization: `Bearer ${userToken}` },
-            });
-            favoritesResponse.data.forEach((favorite) => {
-                initialUserFavorites[favorite.post_id] = true;
-            });
+          likesResponse.data.forEach((like) => {
+            initialUserLikes[like.post_id] = true;
+          });
+          favoritesResponse.data.forEach((favorite) => {
+            initialUserFavorites[favorite.post_id] = true;
+          });
         } catch (error) {
-            console.error( "Erro ao buscar likes ou favoritos do usuário:", error.response?.data || error.message);
+          console.error(
+            "Erro ao buscar likes ou favoritos do usuário:",
+            error.response?.data || error.message
+          );
         }
       }
       setUserLikes(initialUserLikes);
@@ -104,8 +84,50 @@ const HomeScreen = ({ navigation }) => {
     } finally {
       setLoadingPosts(false);
     }
+  }, [searchTerm]); // A função é recriada apenas se `searchTerm` mudar.
+
+  // Efeito para carregar dados iniciais e pedir permissões
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem("userToken");
+        if (userToken) {
+          const meResponse = await api.get("/users/me", {
+            headers: { Authorization: `Bearer ${userToken}` },
+          });
+          setCurrentUserId(meResponse.data.id);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados do usuário:", error);
+      }
+      fetchPosts(); // Busca inicial de posts
+    };
+
+    loadInitialData();
+
+    // Pede permissão para acessar a galeria de imagens
+    (async () => {
+      if (Platform.OS !== "web") {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "Permissão Negada",
+            "Desculpe, precisamos de permissões de galeria para isso funcionar!"
+          );
+        }
+      }
+    })();
+  }, [fetchPosts]); // Depende de fetchPosts
+
+  // Função para o "pull-to-refresh"
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchPosts();
+    setIsRefreshing(false);
   };
 
+  // Função para selecionar uma imagem da galeria
   const pickPostImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -119,6 +141,7 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  // Função para criar um novo post
   const handleCreatePost = async () => {
     if (!newPostTitle.trim() || !newPostContent.trim()) {
       Alert.alert("Erro", "Título e conteúdo do post não podem ser vazios.");
@@ -141,21 +164,21 @@ const HomeScreen = ({ navigation }) => {
       let imageUrlToSave = null;
       if (newPostImageUri) {
         const formData = new FormData();
-        const filename = newPostImageUri.split('/').pop();
+        const filename = newPostImageUri.split("/").pop();
         const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image';
+        const type = match ? `image/${match[1]}` : "image";
 
-        if (Platform.OS === 'web') {
-            const response = await fetch(newPostImageUri);
-            const blob = await response.blob();
-            formData.append('postImage', blob, filename);
+        // Adapta o upload para web e nativo
+        if (Platform.OS === "web") {
+          const response = await fetch(newPostImageUri);
+          const blob = await response.blob();
+          formData.append("postImage", blob, filename);
         } else {
-            const postImageFile = {
-                uri: newPostImageUri,
-                name: filename,
-                type: type,
-            };
-            formData.append("postImage", postImageFile);
+          formData.append("postImage", {
+            uri: newPostImageUri,
+            name: filename,
+            type,
+          });
         }
 
         try {
@@ -172,18 +195,16 @@ const HomeScreen = ({ navigation }) => {
           imageUrlToSave = uploadResponse.data.imageUrl;
         } catch (uploadError) {
           console.error(
-            "Erro ao fazer upload da imagem do post:",
-            JSON.stringify(uploadError.response?.data) || uploadError.message
+            "Erro ao fazer upload da imagem:",
+            uploadError.response?.data || uploadError.message
           );
-          Alert.alert(
-            "Erro de Upload",
-            "Não foi possível fazer upload da imagem do post."
-          );
+          Alert.alert("Erro", "Não foi possível fazer upload da imagem.");
           setIsSubmitting(false);
           return;
         }
       }
 
+      // Envia os dados do post para a API
       await api.post(
         "/posts",
         {
@@ -195,17 +216,18 @@ const HomeScreen = ({ navigation }) => {
       );
 
       Alert.alert("Sucesso", "Post criado com sucesso!");
+      // Limpa os campos após o sucesso
       setNewPostTitle("");
       setNewPostContent("");
       setNewPostImageUri(null);
-      fetchPosts();
+      await fetchPosts(); // Atualiza a lista de posts
     } catch (error) {
       console.error(
         "Erro ao criar post:",
-        JSON.stringify(error.response?.data) || error.message
+        error.response?.data || error.message
       );
       Alert.alert(
-        "Erro ao Criar Post",
+        "Erro",
         error.response?.data?.message || "Ocorreu um erro ao criar o post."
       );
       if (error.response?.status === 401 || error.response?.status === 403) {
@@ -216,6 +238,7 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  // Funções para curtir e favoritar
   const handleToggleLike = async (postId) => {
     try {
       const userToken = await AsyncStorage.getItem("userToken");
@@ -224,39 +247,23 @@ const HomeScreen = ({ navigation }) => {
         signOut();
         return;
       }
-      const response = await api.post(
-        `/posts/${postId}/like`,
-        {},
-        { headers: { Authorization: `Bearer ${userToken}` } }
-      );
+      const response = await api.post(`/posts/${postId}/like`, {}, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
 
-      const liked = response.data.liked;
-      setUserLikes((prevLikes) => ({
-        ...prevLikes,
-        [postId]: liked,
-      }));
+      const { liked } = response.data;
+      setUserLikes((prev) => ({ ...prev, [postId]: liked }));
 
-      setPosts((prevPosts) =>
-        prevPosts.map((post) =>
+      // Atualiza a contagem de likes localmente para resposta imediata da UI
+      setPosts((prev) =>
+        prev.map((post) =>
           post.id === postId
-            ? {
-                ...post,
-                likes_count: liked
-                  ? post.likes_count + 1
-                  : Math.max(0, post.likes_count - 1),
-              }
+            ? { ...post, likes_count: liked ? post.likes_count + 1 : Math.max(0, post.likes_count - 1) }
             : post
         )
       );
     } catch (error) {
-      console.error(
-        "Erro ao curtir/descurtir:",
-        error.response?.data || error.message
-      );
-      Alert.alert(
-        "Erro",
-        error.response?.data?.message || "Não foi possível processar o like."
-      );
+      console.error("Erro no like:", error.response?.data || error.message);
       if (error.response?.status === 401 || error.response?.status === 403) {
         signOut();
       }
@@ -267,44 +274,30 @@ const HomeScreen = ({ navigation }) => {
     try {
       const userToken = await AsyncStorage.getItem("userToken");
       if (!userToken) {
-        Alert.alert("Erro", "Você precisa estar logado para favoritar posts.");
+        Alert.alert("Erro", "Você precisa estar logado para favoritar.");
         signOut();
         return;
       }
-      const response = await api.post(
-        `/posts/${postId}/favorite`,
-        {},
-        { headers: { Authorization: `Bearer ${userToken}` } }
-      );
+      const response = await api.post(`/posts/${postId}/favorite`, {}, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
       Alert.alert("Sucesso", response.data.message);
-
-      setUserFavorites((prevFavorites) => ({
-        ...prevFavorites,
-        [postId]: response.data.favorited,
-      }));
-
+      setUserFavorites((prev) => ({ ...prev, [postId]: response.data.favorited }));
     } catch (error) {
-      console.error(
-        "Erro ao favoritar/desfavoritar:",
-        error.response?.data || error.message
-      );
-      Alert.alert(
-        "Erro",
-        error.response?.data?.message ||
-          "Não foi possível processar o favorito."
-      );
+      console.error("Erro ao favoritar:", error.response?.data || error.message);
       if (error.response?.status === 401 || error.response?.status === 403) {
         signOut();
       }
     }
   };
 
+  // Componente para renderizar cada item da lista de posts
   const renderPostItem = ({ item }) => (
     <View style={styles.postCard}>
       <View style={styles.postHeader}>
         {item.profile_picture_url ? (
           <Image
-            source={{ uri: `${api.defaults.baseURL.replace('/api', '')}${item.profile_picture_url}` }}
+            source={{ uri: `${api.defaults.baseURL.replace("/api", "")}${item.profile_picture_url}` }}
             style={styles.profilePicture}
           />
         ) : (
@@ -321,7 +314,7 @@ const HomeScreen = ({ navigation }) => {
       <Text style={styles.postContent}>{item.content}</Text>
       {item.image_url && (
         <Image
-          source={{ uri: `${api.defaults.baseURL.replace('/api', '')}${item.image_url}` }}
+          source={{ uri: `${api.defaults.baseURL.replace("/api", "")}${item.image_url}` }}
           style={styles.postImage}
         />
       )}
@@ -337,7 +330,6 @@ const HomeScreen = ({ navigation }) => {
           />
           <Text style={styles.interactionText}>{item.likes_count}</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.interactionButton}
           onPress={() => navigation.navigate("PostDetail", { postId: item.id })}
@@ -345,7 +337,6 @@ const HomeScreen = ({ navigation }) => {
           <Ionicons name="chatbubble-outline" size={24} color="#666" />
           <Text style={styles.interactionText}>{item.comments_count}</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.interactionButton}
           onPress={() => handleToggleFavorite(item.id)}
@@ -360,6 +351,7 @@ const HomeScreen = ({ navigation }) => {
     </View>
   );
 
+  // Tela de loading inicial
   if (loadingPosts && posts.length === 0) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -372,8 +364,14 @@ const HomeScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <Header title={"devSocial"} />
-
       <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderPostItem}
+        contentContainerStyle={styles.postListContainer}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={["#116530"]} />
+        }
         ListHeaderComponent={
           <>
             <View style={styles.searchContainer}>
@@ -382,7 +380,8 @@ const HomeScreen = ({ navigation }) => {
                 placeholder="Pesquisar posts..."
                 value={searchTerm}
                 onChangeText={setSearchTerm}
-                onSubmitEditing={fetchPosts}
+                onSubmitEditing={fetchPosts} // Busca ao pressionar "Enter"
+                returnKeyType="search"
               />
               <TouchableOpacity onPress={fetchPosts} style={styles.searchButton}>
                 <Ionicons name="search" size={24} color="#fff" />
@@ -403,51 +402,39 @@ const HomeScreen = ({ navigation }) => {
                 onChangeText={setNewPostContent}
                 multiline
               />
-              <TouchableOpacity
-                onPress={pickPostImage}
-                style={styles.imagePickerButton}
-              >
+              <TouchableOpacity onPress={pickPostImage} style={styles.imagePickerButton}>
                 <Ionicons name="image-outline" size={24} color="#0c411fff" />
                 <Text style={styles.imagePickerButtonText}>Adicionar Imagem</Text>
               </TouchableOpacity>
               {newPostImageUri && (
-                <Image
-                  source={{ uri: newPostImageUri }}
-                  style={styles.previewImage}
-                />
+                <Image source={{ uri: newPostImageUri }} style={styles.previewImage} />
               )}
               <Button
                 title={isSubmitting ? "Publicando..." : "Criar Post"}
                 onPress={handleCreatePost}
                 disabled={isSubmitting}
-                style={styles.createButton}
+                color="#116530"
               />
             </View>
           </>
         }
-        data={posts}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderPostItem}
-        contentContainerStyle={styles.postListContainer}
         ListFooterComponent={
-            loadingPosts ? (
-              <ActivityIndicator size="large" color="#116530" style={{ marginVertical: 20 }} />
-            ) : null
+          loadingPosts && posts.length > 0 ? (
+            <ActivityIndicator size="large" color="#116530" style={{ marginVertical: 20 }} />
+          ) : null
         }
         ListEmptyComponent={
           !loadingPosts ? (
             <Text style={styles.noPostsText}>
-              Nenhum post encontrado. Tente ajustar sua pesquisa ou seja o
-              primeiro a postar!
+              Nenhum post encontrado. Tente ajustar sua pesquisa ou seja o primeiro a postar!
             </Text>
           ) : null
         }
-        onRefresh={fetchPosts}
-        refreshing={loadingPosts}
       />
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
     container: {
@@ -467,6 +454,7 @@ const styles = StyleSheet.create({
         maxWidth: "800px",
         width: "100%",
         marginHorizontal: "auto",
+        paddingBottom: 20,
     },
     searchContainer: {
       flexDirection: "row",
@@ -486,6 +474,7 @@ const styles = StyleSheet.create({
       flex: 1,
       padding: 10,
       fontSize: 16,
+      color: '#333',
     },
     searchButton: {
       backgroundColor: "#116530",
@@ -527,19 +516,12 @@ const styles = StyleSheet.create({
       color: "#116530",
       fontWeight: "bold",
     },
-    createButton:{
-      backgroundColor: '#116530',
-    },
     previewImage: {
       width: "100%",
       height: 150,
       borderRadius: 8,
       resizeMode: "cover",
       marginBottom: 10,
-    },
-    postList: {
-      paddingHorizontal: 15,
-      paddingBottom: 20,
     },
     postCard: {
       backgroundColor: "#fff",
@@ -616,5 +598,6 @@ const styles = StyleSheet.create({
       color: "#777",
     },
   });
+
 
 export default HomeScreen;

@@ -20,11 +20,10 @@ const ProfileScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('myPosts');
 
   useEffect(() => {
-    // Adicionar um listener para focar na tela e recarregar os dados
     const unsubscribe = navigation.addListener('focus', () => {
       fetchProfileData();
     });
-    return unsubscribe; // Limpar o listener
+    return unsubscribe;
   }, [navigation]);
 
   const fetchProfileData = async () => {
@@ -50,8 +49,7 @@ const ProfileScreen = ({ navigation }) => {
       const favoritePostsResponse = await api.get('/users/me/favorites', {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      // CORREÇÃO AQUI: Use favoritePostsResponse.data
-      setFavoritePosts(favoritePostsResponse.data); // LINHA CORRIGIDA
+      setFavoritePosts(favoritePostsResponse.data);
 
     } catch (error) {
       console.error('Erro ao buscar dados do perfil:', error.response?.data || error.message);
@@ -69,6 +67,23 @@ const ProfileScreen = ({ navigation }) => {
       <View style={styles.postCard}>
         <Text style={styles.postTitle}>{item.title}</Text>
         <Text style={styles.postContentPreview}>{item.content.substring(0, 100)}...</Text>
+        <View style={styles.postStatsRow}>
+            <Text style={styles.postStatItem}>{item.likes_count} Curtidas</Text>
+            <Text style={styles.postStatItem}>{item.comments_count} Comentários</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderFavoritePostItem = ({ item }) => (
+    <TouchableOpacity onPress={() => navigation.navigate('PostDetail', { postId: item.id })}>
+      <View style={styles.favoritePostCard}>
+        <View style={styles.favoriteHeader}>
+            <Ionicons name="star" size={20} color="#FFD700" />
+            <Text style={styles.postTitle}>{item.title}</Text>
+        </View>
+        <Text style={styles.postContentPreview}>{item.content.substring(0, 100)}...</Text>
+        <Text style={styles.authorText}>por: {item.username}</Text>
         <View style={styles.postStatsRow}>
             <Text style={styles.postStatItem}>{item.likes_count} Curtidas</Text>
             <Text style={styles.postStatItem}>{item.comments_count} Comentários</Text>
@@ -101,7 +116,6 @@ const ProfileScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         {/* Informações do Usuário */}
         <View style={styles.profileInfoCard}>
-          {/* Garante que a URL da imagem esteja completa */}
           {user.profile_picture_url ? (
             <Image source={{ uri: `${api.defaults.baseURL.replace('/api', '')}${user.profile_picture_url}` }} style={styles.profilePicture} />
           ) : (
@@ -122,7 +136,7 @@ const ProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'favorites' && styles.activeTab]}
-            onPress={() => setActiveTab('favorites')}
+            onPress={() => setActiveTab('favorites')} // CORRIGIDO AQUI
           >
             <Text style={[styles.tabText, activeTab === 'favorites' && styles.activeTabText]}>Favoritos ({favoritePosts.length})</Text>
           </TouchableOpacity>
@@ -146,7 +160,7 @@ const ProfileScreen = ({ navigation }) => {
             <FlatList
               data={favoritePosts}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={renderPostItem}
+              renderItem={renderFavoritePostItem}
               scrollEnabled={false}
               contentContainerStyle={styles.postListContent}
             />
@@ -261,15 +275,41 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
+  favoritePostCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
+    borderLeftWidth: 5,
+    borderLeftColor: '#FFD700',
+  },
+  favoriteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
   postTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 5,
     color: '#333',
+    marginLeft: 8,
   },
   postContentPreview: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 10,
+  },
+  authorText: {
+    fontSize: 12,
+    color: '#555',
+    fontStyle: 'italic',
+    textAlign: 'right',
     marginBottom: 10,
   },
   postStatsRow: {

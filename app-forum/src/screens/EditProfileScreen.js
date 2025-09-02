@@ -26,6 +26,8 @@ const EditProfileScreen = ({ route, navigation }) => {
   const [selectedImageUri, setSelectedImageUri] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
+  // --- NOVO: Estado para controlar se a foto foi removida ---
+  const [isPhotoRemoved, setIsPhotoRemoved] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -50,7 +52,16 @@ const EditProfileScreen = ({ route, navigation }) => {
       const asset = result.assets[0];
       setSelectedImageUri(asset.uri);
       setProfilePictureUrl(asset.uri);
+      // --- NOVO: Se o usuário escolher uma nova foto, resetamos o estado de remoção ---
+      setIsPhotoRemoved(false);
     }
+  };
+  
+  // --- NOVA FUNÇÃO: Para lidar com a remoção da foto ---
+  const handleRemovePhoto = () => {
+    setProfilePictureUrl(null); // Limpa a imagem da tela
+    setSelectedImageUri(null); // Limpa a imagem selecionada
+    setIsPhotoRemoved(true); // Define a flag de remoção
   };
 
   const handleUpdateProfile = async () => {
@@ -70,7 +81,8 @@ const EditProfileScreen = ({ route, navigation }) => {
 
       let finalProfilePictureUrl = profilePictureUrl;
 
-      if (selectedImageUri && selectedImageUri !== initialUser.profile_picture_url) {
+      // Upload só acontece se uma nova imagem foi selecionada
+      if (selectedImageUri) {
         const formData = new FormData();
         const filename = selectedImageUri.split('/').pop();
         
@@ -96,10 +108,18 @@ const EditProfileScreen = ({ route, navigation }) => {
       }
 
       const updateData = {
-        username: username.trim() === initialUser.username ? undefined : username.trim(),
-        email: email.trim() === initialUser.email ? undefined : email.trim(),
-        profile_picture_url: finalProfilePictureUrl === initialUser.profile_picture_url ? undefined : finalProfilePictureUrl,
+        username: username.trim() !== initialUser.username ? username.trim() : undefined,
+        email: email.trim() !== initialUser.email ? email.trim() : undefined,
       };
+
+      // --- LÓGICA ATUALIZADA: Para lidar com a remoção da foto ---
+      if (isPhotoRemoved) {
+        updateData.profile_picture_url = null; // Envia null para o backend
+      } else if (selectedImageUri) {
+        // Só envia a nova URL se uma nova imagem foi selecionada e enviada com sucesso
+        updateData.profile_picture_url = finalProfilePictureUrl;
+      }
+      // Se nem removeu nem selecionou, não adicionamos a propriedade e nada muda no backend
 
       if (newPassword) {
         updateData.old_password = oldPassword;
@@ -110,7 +130,8 @@ const EditProfileScreen = ({ route, navigation }) => {
         Object.entries(updateData).filter(([, value]) => value !== undefined)
       );
 
-      if (Object.keys(filteredUpdateData).length === 0 && !selectedImageUri) {
+      // Verifica se há algo para atualizar
+      if (Object.keys(filteredUpdateData).length === 0) {
         Alert.alert('Aviso', 'Nenhuma alteração detetada para salvar.');
         setIsSubmitting(false);
         return;
@@ -135,15 +156,30 @@ const EditProfileScreen = ({ route, navigation }) => {
   return (
     <View style={styles.container}>
       <Header title={"Editar Perfil"} />
+
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <TouchableOpacity onPress={pickImage} style={styles.profilePictureContainer}>
-          {profilePictureUrl ? (
-            <Image source={{ uri: profilePictureUrl }} style={styles.profilePicture} />
-          ) : (
-            <Ionicons name="camera-outline" size={80} color="#ccc" style={styles.profilePicturePlaceholder} />
-          )}
-          <Text style={styles.changePhotoText}>Trocar foto de perfil</Text>
-        </TouchableOpacity>
+        <View style={styles.profilePictureContainer}>
+          <TouchableOpacity onPress={pickImage}>
+            {profilePictureUrl ? (
+              <Image source={{ uri: profilePictureUrl }} style={styles.profilePicture} />
+            ) : (
+              <Ionicons name="camera-outline" size={80} color="#ccc" style={styles.profilePicturePlaceholder} />
+            )}
+          </TouchableOpacity>
+          <View style={styles.photoActionsContainer}>
+            <TouchableOpacity onPress={pickImage}>
+              <Text style={styles.changePhotoText}>Trocar foto</Text>
+            </TouchableOpacity>
+            {/* --- NOVO: Botão para remover a foto --- */}
+            {profilePictureUrl && ( // Só mostra o botão se houver uma foto
+              <TouchableOpacity onPress={handleRemovePhoto}>
+                <Text style={[styles.changePhotoText, styles.removePhotoText]}>Remover Foto</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* O resto do código dos inputs e botão de salvar permanece o mesmo... */}
         <TextInput
           style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
           onFocus={() => setFocusedInput('username')}
@@ -207,7 +243,21 @@ const styles = StyleSheet.create({
     profilePictureContainer: { alignItems: 'center', marginBottom: "40px" },
     profilePicture: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#007bff' },
     profilePicturePlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', display: "flex" },
-    changePhotoText: { marginTop: 10, color: '#007bff', textDecorationLine: 'underline' },
+    // --- NOVO: Estilos para os botões de foto ---
+    photoActionsContainer: {
+      flexDirection: 'row',
+      marginTop: 10,
+      justifyContent: 'center',
+    },
+    changePhotoText: {
+      color: '#007bff',
+      textDecorationLine: 'underline',
+      marginHorizontal: 15, // Espaçamento entre os botões
+      fontSize: 16,
+    },
+    removePhotoText: {
+      color: '#dc3545', // Cor vermelha para indicar remoção
+    },
     input: { width: "80%", paddingVertical: 10, paddingHorizontal: 20, borderWidth: 2, borderRadius: 40, borderColor: "rgba(255, 255, 255, 0.5)", backgroundColor: "rgba(255, 255, 255, 0.2)", marginBottom: 15, color: "#fff", fontSize: 16, textAlign: 'flex-start' },
     inputFocused: { borderColor: 'rgba(255, 255, 255, 1)', backgroundColor: "rgba(255, 255, 255, 0.3)", shadowColor: '#fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 15, outlineStyle: 'none' },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 20, marginBottom: 10, alignSelf: 'flex-start', width: '100%' },

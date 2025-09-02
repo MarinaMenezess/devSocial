@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 exports.getMe = async (req, res) => {
   try {
     const [users] = await pool.query(
-      'SELECT id, username, email, profile_picture_url FROM users WHERE id = ?',
+      'SELECT id, username, email, profile_picture_url, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
     if (users.length === 0) {
@@ -29,7 +29,9 @@ exports.getMyPosts = async (req, res) => {
       SELECT 
         p.id, p.title, p.content, p.image_url, p.created_at,
         u.username AS author_username,
-        u.profile_picture_url AS author_profile_picture_url
+        u.profile_picture_url AS author_profile_picture_url,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes_count,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
       FROM posts p
       JOIN users u ON p.user_id = u.id
       WHERE p.user_id = ?
@@ -55,7 +57,9 @@ exports.getMyFavoritePosts = async (req, res) => {
                 p.image_url, 
                 p.created_at,
                 u.username AS author_username,
-                u.profile_picture_url AS author_profile_picture_url
+                u.profile_picture_url AS author_profile_picture_url,
+                (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes_count,
+                (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
             FROM favorites f
             JOIN posts p ON f.post_id = p.id
             JOIN users u ON p.user_id = u.id

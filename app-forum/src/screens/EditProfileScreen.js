@@ -4,7 +4,7 @@ import React, { useState, useContext, useEffect } from 'react';
 import {
   View, Text, TextInput, Button, StyleSheet, Alert,
   ScrollView, ActivityIndicator, Image, TouchableOpacity,
-  Platform // <-- Adicionar Platform aqui
+  Platform
 } from 'react-native';
 import AuthContext from '../context/AuthContext';
 import api from '../services/api';
@@ -25,10 +25,11 @@ const EditProfileScreen = ({ route, navigation }) => {
   const [profilePictureUrl, setProfilePictureUrl] = useState(initialUser.profile_picture_url);
   const [selectedImageUri, setSelectedImageUri] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [focusedInput, setFocusedInput] = useState(null);
 
   useEffect(() => {
     (async () => {
-      if (Platform.OS !== 'web') { // Permissões são necessárias apenas para apps nativos
+      if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('Permissão Negada', 'Desculpe, precisamos de permissões de galeria para isso funcionar!');
@@ -45,9 +46,10 @@ const EditProfileScreen = ({ route, navigation }) => {
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      setSelectedImageUri(result.assets[0].uri);
-      setProfilePictureUrl(result.assets[0].uri);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      setSelectedImageUri(asset.uri);
+      setProfilePictureUrl(asset.uri);
     }
   };
 
@@ -67,22 +69,15 @@ const EditProfileScreen = ({ route, navigation }) => {
       }
 
       let finalProfilePictureUrl = profilePictureUrl;
-      if (selectedImageUri) {
-        // Se uma nova imagem foi selecionada, faça o upload primeiro
+
+      if (selectedImageUri && selectedImageUri !== initialUser.profile_picture_url) {
         const formData = new FormData();
-        const filename = selectedImageUri.split('/').pop(); // Extrai o nome do arquivo da URI
-        const match = /\.(\w+)$/.exec(filename); // Pega a extensão
-        const type = match ? `image/${match[1]}` : 'image'; // Tenta inferir o tipo MIME
-
-        // Correção aqui:
-        // Use o Platform.OS para adaptar o URI e o nome do arquivo para web e nativo
-        const imageFile = {
-            uri: Platform.OS === 'android' ? selectedImageUri : selectedImageUri.replace('file://', ''),
-            name: Platform.OS === 'android' ? filename : `${initialUser.id}_${Date.now()}.${match ? match[1] : 'jpg'}`, // Garante nome de arquivo para web/iOS
-            type: type,
-        };
-
-        formData.append('profilePicture', imageFile); // 'profilePicture' deve corresponder ao nome do campo no Multer
+        const filename = selectedImageUri.split('/').pop();
+        
+        const response = await fetch(selectedImageUri);
+        const blob = await response.blob();
+        
+        formData.append('profilePicture', blob, filename);
 
         try {
           const uploadResponse = await api.post('/upload/profile-picture', formData, {
@@ -93,8 +88,8 @@ const EditProfileScreen = ({ route, navigation }) => {
           });
           finalProfilePictureUrl = uploadResponse.data.imageUrl;
         } catch (uploadError) {
-          console.error('Erro ao fazer upload da imagem de perfil:', uploadError.response?.data || uploadError.message);
-          Alert.alert('Erro de Upload', 'Não foi possível fazer upload da foto de perfil. Verifique o console para detalhes.');
+          console.error('Erro ao fazer upload da imagem de perfil:', uploadError.response?.data);
+          Alert.alert('Erro de Upload', uploadError.response?.data?.message || 'Não foi possível fazer upload da foto de perfil.');
           setIsSubmitting(false);
           return;
         }
@@ -115,19 +110,15 @@ const EditProfileScreen = ({ route, navigation }) => {
         Object.entries(updateData).filter(([, value]) => value !== undefined)
       );
 
-      if (Object.keys(filteredUpdateData).length === 0 && !selectedImageUri) { // Adicionado !selectedImageUri
-        Alert.alert('Aviso', 'Nenhuma alteração detectada para salvar.');
+      if (Object.keys(filteredUpdateData).length === 0 && !selectedImageUri) {
+        Alert.alert('Aviso', 'Nenhuma alteração detetada para salvar.');
         setIsSubmitting(false);
         return;
       }
 
-      const response = await api.put(
-        '/users/me',
-        filteredUpdateData,
-        { headers: { Authorization: `Bearer ${userToken}` } }
-      );
+      await api.put('/users/me', filteredUpdateData, { headers: { Authorization: `Bearer ${userToken}` } });
 
-      Alert.alert('Sucesso', response.data.message);
+      Alert.alert('Sucesso', 'Perfil atualizado com sucesso!');
       navigation.goBack();
 
     } catch (error) {
@@ -144,7 +135,6 @@ const EditProfileScreen = ({ route, navigation }) => {
   return (
     <View style={styles.container}>
       <Header title={"Editar Perfil"} />
-
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <TouchableOpacity onPress={pickImage} style={styles.profilePictureContainer}>
           {profilePictureUrl ? (
@@ -154,46 +144,53 @@ const EditProfileScreen = ({ route, navigation }) => {
           )}
           <Text style={styles.changePhotoText}>Trocar foto de perfil</Text>
         </TouchableOpacity>
-
         <TextInput
-          style={[styles.sectionTitle, focusedInput === 'username' && styles.inputFocused]}
+          style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
+          onFocus={() => setFocusedInput('username')}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Nome de Usuário"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
         />
         <TextInput
-          style={[styles.sectionTitle, focusedInput === 'email' && styles.inputFocused]}
+          style={[styles.input, focusedInput === 'email' && styles.inputFocused]}
+          onFocus={() => setFocusedInput('email')}
+          onBlur={() => setFocusedInput(null)}
           placeholder="E-mail"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
         />
-
         <Text style={styles.sectionTitle}>Mudar Senha (Opcional)</Text>
         <TextInput
-          style={[styles.sectionTitle, focusedInput === 'old-password' && styles.inputFocused]}
+          style={[styles.input, focusedInput === 'old-password' && styles.inputFocused]}
+          onFocus={() => setFocusedInput('old-password')}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Senha Antiga"
           value={oldPassword}
           onChangeText={setOldPassword}
           secureTextEntry
         />
         <TextInput
-          style={[styles.sectionTitle, focusedInput === 'new-password' && styles.inputFocused]}
+          style={[styles.input, focusedInput === 'new-password' && styles.inputFocused]}
+          onFocus={() => setFocusedInput('new-password')}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Nova Senha"
           value={newPassword}
           onChangeText={setNewPassword}
           secureTextEntry
         />
         <TextInput
-          style={[styles.sectionTitle, focusedInput === 'confirm-password' && styles.inputFocused]}
+          style={[styles.input, focusedInput === 'confirm-password' && styles.inputFocused]}
+          onFocus={() => setFocusedInput('confirm-password')}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Confirmar Nova Senha"
           value={confirmNewPassword}
           onChangeText={setConfirmNewPassword}
           secureTextEntry
         />
-
         <Button
           title={isSubmitting ? "Salvando..." : "Salvar Alterações"}
           onPress={handleUpdateProfile}
@@ -205,73 +202,15 @@ const EditProfileScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#A3EBB1',
-  },
-  scrollViewContent: {
-    padding: 20,
-    alignItems: 'center',
-    maxWidth: "800px",
-    marginHorizontal: "auto",
-    width: "100%"
-  },
-  profilePictureContainer: {
-    alignItems: 'center',
-    marginBottom: "40px"
-  },
-  profilePicture: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: '#007bff',
-  },
-  profilePicturePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    display: "flex"
-  },
-  changePhotoText: {
-    marginTop: 10,
-    color: '#007bff',
-    textDecorationLine: 'underline',
-  },
-  input: {
-    width: "80%",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderWidth: 2,
-    borderRadius: 40,
-    borderColor: "rgba(255, 255, 255, 0.5)",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    marginBottom: 15,
-    color: "#fff",
-    fontSize: 16,
-    textAlign: 'flex-start'
-  },
-  inputFocused: {
-    borderColor: 'rgba(255, 255, 255, 1)',
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    outlineStyle: 'none',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 20,
-    marginBottom: 10,
-    alignSelf: 'flex-start',
-    width: '100%',
-  },
+    container: { flex: 1, backgroundColor: '#A3EBB1' },
+    scrollViewContent: { padding: 20, alignItems: 'center', maxWidth: "800px", marginHorizontal: "auto", width: "100%" },
+    profilePictureContainer: { alignItems: 'center', marginBottom: "40px" },
+    profilePicture: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: '#007bff' },
+    profilePicturePlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', display: "flex" },
+    changePhotoText: { marginTop: 10, color: '#007bff', textDecorationLine: 'underline' },
+    input: { width: "80%", paddingVertical: 10, paddingHorizontal: 20, borderWidth: 2, borderRadius: 40, borderColor: "rgba(255, 255, 255, 0.5)", backgroundColor: "rgba(255, 255, 255, 0.2)", marginBottom: 15, color: "#fff", fontSize: 16, textAlign: 'flex-start' },
+    inputFocused: { borderColor: 'rgba(255, 255, 255, 1)', backgroundColor: "rgba(255, 255, 255, 0.3)", shadowColor: '#fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 15, outlineStyle: 'none' },
+    sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 20, marginBottom: 10, alignSelf: 'flex-start', width: '100%' },
 });
 
 export default EditProfileScreen;

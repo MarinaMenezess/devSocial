@@ -1,12 +1,11 @@
 // server/src/controllers/postController.js
 
 const pool = require('../../db');
-
-// ... (outras funções: createPost, searchPosts, etc., permanecem as mesmas)
+const jwt = require('jsonwebtoken'); // É uma boa prática incluir o jwt aqui se for usá-lo
 
 // Função para CRIAR um novo post
 exports.createPost = async (req, res) => {
-  const { title, content, image_url } = req.body; // Corrigido para pegar image_url
+  const { title, content, image_url } = req.body;
   const userId = req.user.id; 
 
   if (!title || !content) {
@@ -16,7 +15,7 @@ exports.createPost = async (req, res) => {
   try {
     const [result] = await pool.query(
       'INSERT INTO posts (user_id, title, content, image_url) VALUES (?, ?, ?, ?)',
-      [userId, title, content, image_url || null] // Usar o image_url do body
+      [userId, title, content, image_url || null]
     );
     res.status(201).json({
       message: 'Post criado com sucesso!',
@@ -31,7 +30,6 @@ exports.createPost = async (req, res) => {
 // Função para BUSCAR todos os posts (com funcionalidade de pesquisa)
 exports.searchPosts = async (req, res) => {
   const { q } = req.query;
-  // Opcional: obter o ID do usuário do token se ele estiver logado para verificar se ele curtiu o post
   const token = req.headers.authorization?.split(' ')[1];
   let userId = null;
   if (token) {
@@ -48,11 +46,16 @@ exports.searchPosts = async (req, res) => {
         p.id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
         u.id AS user_id, u.username, u.profile_picture_url,
         (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count,
-        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comments_count
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comments_count,
+        ${userId ? '(SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) > 0 AS liked_by_user' : 'false AS liked_by_user'}
     FROM posts p
     JOIN users u ON p.user_id = u.id
   `;
   let params = [];
+
+  if (userId) {
+    params.push(userId);
+  }
 
   if (q) {
     query += ` WHERE p.title LIKE ? OR p.content LIKE ?`;
@@ -69,7 +72,6 @@ exports.searchPosts = async (req, res) => {
     res.status(500).json({ message: 'Erro interno do servidor ao buscar/pesquisar posts.' });
   }
 };
-
 
 // Função para BUSCAR um post específico pelo ID
 exports.getPostById = async (req, res) => {
@@ -96,7 +98,7 @@ exports.getPostById = async (req, res) => {
   }
 };
 
-// ... (funções updatePost e deletePost permanecem as mesmas)
+// Função para ATUALIZAR um post
 exports.updatePost = async (req, res) => {
   const { id } = req.params;
   const { title, content } = req.body;
@@ -107,9 +109,12 @@ exports.updatePost = async (req, res) => {
   }
 
   try {
-    const [post] = await pool.query('SELECT * FROM posts WHERE id = ? AND user_id = ?', [id, userId]);
+    const [post] = await pool.query('SELECT user_id FROM posts WHERE id = ?', [id]);
     if (post.length === 0) {
-      return res.status(404).json({ message: 'Post não encontrado ou você não tem permissão para editá-lo.' });
+      return res.status(404).json({ message: 'Post não encontrado.' });
+    }
+    if (post[0].user_id !== userId) {
+      return res.status(403).json({ message: 'Você não tem permissão para editar este post.' });
     }
 
     await pool.query(
@@ -123,28 +128,44 @@ exports.updatePost = async (req, res) => {
   }
 };
 
+// Função para DELETAR um post (VERSÃO COM DIAGNÓSTICO MELHORADO)
 exports.deletePost = async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   try {
-    const [post] = await pool.query('SELECT * FROM posts WHERE id = ? AND user_id = ?', [id, userId]);
+    // 1. Verificar se o post existe e pertence ao usuário
+    const [post] = await pool.query('SELECT user_id FROM posts WHERE id = ?', [id]);
     if (post.length === 0) {
-      return res.status(404).json({ message: 'Post não encontrado ou você não tem permissão para deletá-lo.' });
+      return res.status(404).json({ message: 'Post não encontrado.' });
+    }
+    if (post[0].user_id !== userId) {
+        return res.status(403).json({ message: 'Você não tem permissão para deletar este post.' });
     }
 
-    await pool.query('DELETE FROM posts WHERE id = ?', [id]);
+    // 2. Executar a exclusão e guardar o resultado
+    const [deleteResult] = await pool.query('DELETE FROM posts WHERE id = ?', [id]);
+
+    // 3. LOG e VERIFICAÇÃO CRÍTICA para diagnóstico
+    console.log('Resultado da operação de DELETE:', deleteResult);
+
+    // Se nenhuma linha foi afetada, algo está errado no banco de dados.
+    if (deleteResult.affectedRows === 0) {
+        // Isso vai forçar um erro 500, que será capturado pelo "catch" do frontend
+        return res.status(500).json({ message: 'A exclusão falhou no banco de dados, nenhuma linha foi removida.' });
+    }
+
+    // Se chegou aqui, a exclusão funcionou
     res.status(200).json({ message: 'Post deletado com sucesso!' });
+
   } catch (error) {
     console.error('Erro ao deletar post:', error);
     res.status(500).json({ message: 'Erro interno do servidor.' });
   }
 };
 
-
 // Função para CURTIR/DESCUTIR um post
 exports.toggleLike = async (req, res) => {
-  // Alterado para postId para corresponder à rota corrigida
   const { postId } = req.params; 
   const userId = req.user.id;
 
@@ -153,11 +174,9 @@ exports.toggleLike = async (req, res) => {
 
     if (like.length > 0) {
       await pool.query('DELETE FROM likes WHERE post_id = ? AND user_id = ?', [postId, userId]);
-      // Adicionado 'liked: false' para ajudar o frontend a atualizar o estado
       res.status(200).json({ message: 'Like removido.', liked: false });
     } else {
       await pool.query('INSERT INTO likes (post_id, user_id) VALUES (?, ?)', [postId, userId]);
-      // Adicionado 'liked: true'
       res.status(200).json({ message: 'Post curtido!', liked: true });
     }
   } catch (error) {
@@ -166,7 +185,7 @@ exports.toggleLike = async (req, res) => {
   }
 };
 
-// Adicione esta função que estava faltando no seu controller original
+// Função para FAVORITAR/DESFAVORITAR um post
 exports.toggleFavorite = async (req, res) => {
     const { postId } = req.params;
     const userId = req.user.id;

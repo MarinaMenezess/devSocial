@@ -21,7 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import Header from "../components/Header";
-import EditPostModal from "../components/EditPostModal"; // Make sure you have created this component
+import EditPostModal from "../components/EditPostModal";
 
 const HomeScreen = ({ navigation }) => {
   const { signOut } = useContext(AuthContext);
@@ -146,7 +146,6 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  // Functions to handle editing and deleting
   const handleOpenEditModal = (post) => {
     setEditingPost(post);
     setEditModalVisible(true);
@@ -158,31 +157,36 @@ const HomeScreen = ({ navigation }) => {
     onRefresh();
   };
 
-  const handleDeletePost = (postId) => {
-    Alert.alert(
-      "Confirmar Exclusão",
-      "Você tem certeza que deseja excluir este post?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const userToken = await AsyncStorage.getItem("userToken");
-              await api.delete(`/posts/${postId}`, {
-                headers: { Authorization: `Bearer ${userToken}` },
-              });
-              Alert.alert("Sucesso", "Post excluído.");
-              setPosts((prevPosts) => prevPosts.filter((p) => p.id !== postId));
-            } catch (error) {
-              console.error("Erro ao excluir post:", error.response?.data || error.message);
-              Alert.alert("Erro", "Não foi possível excluir o post.");
-            }
-          },
-        },
-      ]
-    );
+  // VERSÃO DE TESTE: Exclui o post diretamente sem pedir confirmação.
+  const handleDeletePost = async (postId) => {
+    // PONTO DE VERIFICAÇÃO 1: A função foi chamada?
+    console.log(`[DEBUG] handleDeletePost (versão direta) foi chamada para o post ID: ${postId}`);
+
+    try {
+      const userToken = await AsyncStorage.getItem("userToken");
+      if (!userToken) {
+        console.error('[DEBUG] ERRO FATAL: Token do usuário não encontrado.');
+        Alert.alert("Erro", "Você não está autenticado.");
+        return;
+      }
+      
+      // PONTO DE VERIFICAÇÃO 3: Enviando a requisição DELETE.
+      console.log(`[DEBUG] Enviando requisição DELETE para /posts/${postId}`);
+
+      await api.delete(`/posts/${postId}`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+
+      // PONTO DE VERIFICAÇÃO 4: Requisição bem-sucedida.
+      console.log(`[DEBUG] Requisição DELETE para o post ${postId} foi bem-sucedida.`);
+
+      Alert.alert("Sucesso", "Post excluído.");
+      setPosts((prevPosts) => prevPosts.filter((p) => p.id !== postId));
+    } catch (error) {
+      // PONTO DE VERIFICAÇÃO 5: A requisição falhou.
+      console.error("[DEBUG] Erro ao excluir post:", error.response?.data || error.message);
+      Alert.alert("Erro", "Não foi possível excluir o post. Verifique o console para mais detalhes.");
+    }
   };
 
   const handleToggleLike = async (postId) => {
@@ -318,33 +322,175 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#A3EBB1" },
-  loadingContainer: { justifyContent: 'center', alignItems: 'center' },
-  greetingContainer: { paddingHorizontal: 20, paddingVertical: 15, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: '#eee' }, // Background corrected
-  greetingText: { fontSize: 22, fontWeight: "bold", color: '#333' },
-  postListContainer: { maxWidth: "800px", width: "100%", marginHorizontal: "auto", paddingBottom: 20 },
-  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", marginHorizontal: 15, marginTop: 15, borderRadius: 25, elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-  searchInput: { flex: 1, padding: 12, fontSize: 16, color: '#333', paddingLeft: 20 },
-  searchButton: { backgroundColor: "#116530", padding: 10, borderTopRightRadius: 25, borderBottomRightRadius: 25 },
-  createPostContainer: { backgroundColor: "#fff", padding: 20, marginHorizontal: 15, marginVertical: 15, borderRadius: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 5 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 5, padding: 10, marginBottom: 10, backgroundColor: "#f9f9f9" },
-  imagePickerButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#e9f5ff", padding: 10, borderRadius: 5, justifyContent: "center", marginBottom: 10 },
-  imagePickerButtonText: { marginLeft: 10, color: "#116530", fontWeight: "bold" },
-  previewImage: { width: "100%", height: 180, borderRadius: 8, resizeMode: "cover", marginBottom: 10 },
-  postCard: { backgroundColor: "#fff", padding: 15, borderRadius: 10, marginBottom: 15, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 3, marginHorizontal: 15 },
-  postHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10, justifyContent: 'space-between' },
-  postHeaderInfo: { flexDirection: "row", alignItems: "center" },
-  postActions: { flexDirection: 'row' },
-  profilePicture: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
-  profilePicturePlaceholder: { marginRight: 10 },
-  postUsername: { fontWeight: "bold", fontSize: 16, color: "#555" },
-  postTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8, color: "#333" },
-  postContent: { fontSize: 15, lineHeight: 22, color: "#666", marginBottom: 10 },
-  postImage: { width: "100%", height: 200, borderRadius: 8, marginTop: 10, resizeMode: "cover" },
-  postFooter: { flexDirection: "row", justifyContent: "space-around", marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#eee" },
-  interactionButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10 },
-  interactionText: { marginLeft: 5, fontSize: 14, color: "#666" },
-  noPostsText: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#777", marginHorizontal: 20 },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#A3EBB1" 
+  },
+  loadingContainer: { 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  greetingContainer: { 
+    paddingHorizontal: 20, 
+    paddingVertical: 15,
+  },
+  greetingText: { 
+    fontSize: 22, 
+    fontWeight: "bold", 
+    color: '#333' 
+  },
+  postListContainer: { 
+    maxWidth: "800px", 
+    width: "100%", 
+    marginHorizontal: "auto", 
+    paddingBottom: 20 
+  },
+  searchContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#fff", 
+    marginHorizontal: 15, 
+    marginTop: 15, 
+    borderRadius: 25, 
+    elevation: 3, 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 2 
+  },
+  searchInput: { 
+    flex: 1, 
+    padding: 12, 
+    fontSize: 16, 
+    color: '#333', 
+    paddingLeft: 20 
+  },
+  searchButton: { 
+    backgroundColor: "#116530", 
+    padding: 10, 
+    borderTopRightRadius: 25, 
+    borderBottomRightRadius: 25 
+  },
+  createPostContainer: { 
+    backgroundColor: "#fff", 
+    padding: 20, 
+    marginHorizontal: 15, 
+    marginVertical: 15, 
+    borderRadius: 10, 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 3, 
+    elevation: 5 
+  },
+  input: { 
+    borderWidth: 1, 
+    borderColor: "#ddd", 
+    borderRadius: 5, 
+    padding: 10, 
+    marginBottom: 10, 
+    backgroundColor: "#f9f9f9" 
+  },
+  imagePickerButton: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#e9f5ff", 
+    padding: 10, 
+    borderRadius: 5, 
+    justifyContent: "center", 
+    marginBottom: 10 
+  },
+  imagePickerButtonText: { 
+    marginLeft: 10, 
+    color: "#116530", 
+    fontWeight: "bold" 
+  },
+  previewImage: { 
+    width: "100%", 
+    height: 180, 
+    borderRadius: 8, 
+    resizeMode: "cover", 
+    marginBottom: 10 
+  },
+  postCard: { 
+    backgroundColor: "#fff", 
+    padding: 15, 
+    borderRadius: 10, 
+    marginBottom: 15, 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 2, 
+    elevation: 3, 
+    marginHorizontal: 15 
+  },
+  postHeader: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    marginBottom: 10, 
+    justifyContent: 'space-between' 
+  },
+  postHeaderInfo: { 
+    flexDirection: "row", 
+    alignItems: "center" 
+  },
+  postActions: { 
+    flexDirection: 'row' 
+  },
+  profilePicture: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    marginRight: 10 
+  },
+  profilePicturePlaceholder: { 
+    marginRight: 10 
+  },
+  postUsername: { 
+    fontWeight: "bold", 
+    fontSize: 16, 
+    color: "#555" 
+  },
+  postTitle: { 
+    fontSize: 18, 
+    fontWeight: "bold", 
+    marginBottom: 8, 
+    color: "#333" 
+  },
+  postContent: { 
+    fontSize: 15, 
+    lineHeight: 22, 
+    color: "#666", 
+    marginBottom: 10 
+  },
+  postImage: { 
+    width: "100%", 
+    height: 200, 
+    borderRadius: 8, 
+    marginTop: 10, 
+    resizeMode: "cover" },
+  postFooter: { 
+    flexDirection: "row", 
+    justifyContent: "space-around", 
+    marginTop: 10, 
+    paddingTop: 10, 
+    borderTopWidth: 1, 
+    borderTopColor: "#eee" 
+  },
+  interactionButton: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 10 },
+  interactionText: { 
+    marginLeft: 5, 
+    fontSize: 14, 
+    color: "#666" },
+  noPostsText: { 
+    textAlign: "center", 
+    marginTop: 50, 
+    fontSize: 16, color: "#777", 
+    marginHorizontal: 20 
+  },
 });
 
 export default HomeScreen;
